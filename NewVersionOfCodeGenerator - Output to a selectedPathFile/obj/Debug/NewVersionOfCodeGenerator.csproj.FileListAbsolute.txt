@@ -1,0 +1,16 @@
+F:\C22\NewVersionOfCodeGenerator\bin\Debug\NewVersionOfCodeGenerator.exe.config
+F:\C22\NewVersionOfCodeGenerator\bin\Debug\NewVersionOfCodeGenerator.exe
+F:\C22\NewVersionOfCodeGenerator\bin\Debug\NewVersionOfCodeGenerator.pdb
+F:\C22\NewVersionOfCodeGenerator\obj\Debug\NewVersionOfCodeGenerator.csproj.AssemblyReference.cache
+F:\C22\NewVersionOfCodeGenerator\obj\Debug\NewVersionOfCodeGenerator.csproj.CoreCompileInputs.cache
+F:\C22\NewVersionOfCodeGenerator\obj\Debug\NewVersionOfCodeGenerator.exe
+F:\C22\NewVersionOfCodeGenerator\obj\Debug\NewVersionOfCodeGenerator.pdb
+F:\C22\NewVersionOfCodeGenerator\obj\Debug\NewVersionOfCodeGenerator.exe.config
+F:\C22\NewVersionOfCodeGenerator - Copy\bin\Debug\NewVersionOfCodeGenerator.exe.config
+F:\C22\NewVersionOfCodeGenerator - Copy\bin\Debug\NewVersionOfCodeGenerator.exe
+F:\C22\NewVersionOfCodeGenerator - Copy\bin\Debug\NewVersionOfCodeGenerator.pdb
+F:\C22\NewVersionOfCodeGenerator - Copy\obj\Debug\NewVersionOfCodeGenerator.csproj.AssemblyReference.cache
+F:\C22\NewVersionOfCodeGenerator - Copy\obj\Debug\NewVersionOfCodeGenerator.exe.config
+F:\C22\NewVersionOfCodeGenerator - Copy\obj\Debug\NewVersionOfCodeGenerator.csproj.CoreCompileInputs.cache
+F:\C22\NewVersionOfCodeGenerator - Copy\obj\Debug\NewVersionOfCodeGenerator.exe
+F:\C22\NewVersionOfCodeGenerator - Copy\obj\Debug\NewVersionOfCodeGenerator.pdb
