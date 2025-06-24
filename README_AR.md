@@ -40,7 +40,7 @@
 ### التثبيت
 1. استنسخ المستودع:
    ```bash
-   git clone https://github.com/yourusername/ThreeTierGenerator.git
+   git clone https://github.com/MohmdAliMohmd/3-Tier-Architecture-Solution-Generator.git
    ```
 2. افتح الحل في Visual Studio
 3. قم ببناء الحل
