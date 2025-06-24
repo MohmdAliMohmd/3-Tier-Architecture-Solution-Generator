@@ -40,7 +40,7 @@ The generated solution includes complete CRUD operations for all tables and a co
 ### Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/ThreeTierGenerator.git
+   git clone https://github.com/MohmdAliMohmd/3-Tier-Architecture-Solution-Generator.git
    ```
 2. Open the solution in Visual Studio
 3. Build the solution
