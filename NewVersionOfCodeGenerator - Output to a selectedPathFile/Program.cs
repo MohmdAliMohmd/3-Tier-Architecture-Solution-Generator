@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
@@ -234,14 +234,19 @@ namespace ThreeTierGenerator
             return tables;
         }
 
-        static string MapSqlTypeToCsharp(string sqlType)
+        static string MapSqlTypeToCsharp1(string sqlType)
         {
+            if (sqlType == null)
+                return "string"; // Or throw new ArgumentNullException(nameof(sqlType));
+            
             switch (sqlType.ToLower())
             {
                 case "int":
-                case "smallint":
-                case "tinyint":
                     return "int";
+                case "smallint": // Could map to "short" for precision
+                    return "short";
+                case "tinyint":  // Could map to "byte" for precision
+                    return "byte";
                 case "bigint":
                     return "long";
                 case "bit":
@@ -250,9 +255,11 @@ namespace ThreeTierGenerator
                 case "datetime2":
                 case "smalldatetime":
                 case "date":
-                    return "DateTime";
+                    return "DateTime"; // Use "DateOnly" in .NET 6+ for "date"
                 case "time":
-                    return "TimeSpan";
+                    return "TimeSpan"; // Use "TimeOnly" in .NET 6+
+                case "datetimeoffset":
+                    return "DateTimeOffset";
                 case "decimal":
                 case "money":
                 case "smallmoney":
@@ -267,15 +274,63 @@ namespace ThreeTierGenerator
                 case "binary":
                 case "varbinary":
                 case "image":
-                    return "byte[]";
                 case "timestamp":
                 case "rowversion":
-                    return "byte[]"; // SQL Server rowversion
+                    return "byte[]";
                 default:
-                    return "string";
+                    return "string"; // Handles varchar, nvarchar, text, etc.
+            }
+        }
+        static string MapSqlTypeToCsharp(string sqlType)
+        {
+            if (string.IsNullOrEmpty(sqlType))
+                return "string";
+
+            switch (sqlType.ToLower())
+            {
+                // Integer types
+                case "int": return "int";
+                case "smallint": return "short";    // Implicit short→int conversion
+                case "tinyint": return "byte";    // Implicit byte→int conversion
+                case "bigint": return "long";
+
+                // Boolean
+                case "bit": return "bool";
+
+                // Date/Time types
+                case "datetime":
+                case "datetime2":
+                case "smalldatetime":
+                case "date": return "DateTime";
+                case "datetimeoffset": return "DateTimeOffset"; // Critical addition
+                case "time": return "TimeSpan";
+
+                // Decimal types
+                case "decimal":
+                case "money":
+                case "smallmoney":
+                case "numeric": return "decimal";
+
+                // Floating-point
+                case "float": return "double"; // SQL float → C# double
+                case "real": return "float";  // SQL real → C# float
+
+                // GUID
+                case "uniqueidentifier": return "Guid";
+
+                // Binary types
+                case "binary":
+                case "varbinary":
+                case "image":
+                case "timestamp":   // rowversion
+                case "rowversion": return "byte[]";
+
+                // String types
+                default: return "string"; // All others (char, varchar, text, xml, etc.)
             }
         }
 
+      
         static void GenerateSolutionFiles(string solutionPath, string dbName, List<TableSchema> tables, string connectionString)
         {
             // Create projects
@@ -387,61 +442,12 @@ namespace ThreeTierGenerator
             foreach (var col in table.Columns)
             {
                 string readerMethod = GetReaderMethod(col.DataType);
-                // string nullCheck2 = col.IsNullable?
-
-                /*
-
-                The error occurs because the ternary operator tries to return two different types (object from GetValue() and byte[]? from null), causing a type mismatch. Here's how to fix it:
-
-                    Solution 1: Explicit Cast (Recommended)
-                  
-                    definition = reader.IsDBNull(reader.GetOrdinal("definition"))? null
-            : (byte[])reader.GetValue(reader.GetOrdinal("definition"))
-
-                    Solution 2: Direct Column Cast
-                    csharp
-                    definition = reader["definition"] as byte[]; // Returns null for DBNull
-                    Explanation:
-                    Problem:
-                    
-                    reader.GetValue() returns object, while null is treated as byte[]?.
-                    
-                    The compiler can't reconcile these types implicitly.
-                    
-                    Fix Highlights:
-                    
-                    Explicit cast: Use (byte[]) to convert GetValue()'s result to byte[]
-                    
-                    Efficiency: Cache the column ordinal with GetOrdinal() to avoid duplicate calls
-                    
-                    Null Handling: IsDBNull safely checks for database nulls
-                    
-                    Type Consistency: Both sides of ?: now return byte[]? (nullable byte array)
-                    
-                    Alternative:
-                    
-                    The as byte[] cast handles DBNull automatically by returning null
-                    
-                    Why This Works:
-                    Explicitly casts the database value to byte[] when not null
-                    
-                    Maintains byte[]? type for the variable
-                    
-                    Avoids boxing/unboxing overhead
-                    
-                    Safe for database null values
-                    
-                    Choose Solution 1 for explicit control or Solution 2 for concise syntax. Both ensure type consistency.
-                 */
-                string nullCheck1 = col.IsNullable ? $"reader.IsDBNull(reader.GetOrdinal(\"{col.Name}\") ? null :  " :"";
-                string nullFallback1 = col.IsNullable ? $"reader.GetValue(reader.GetOrdinal(\"{col.Name}\")" :"";
                 string nullCheck = col.IsNullable ? $"(reader[\"{col.Name}\"] != DBNull.Value) ? " : "";
                 string nullFallback = col.IsNullable ? $" : ({col.DataType}?)null" : "";
-
-                sb.AppendLine($"                            {col.Name} = {nullCheck}reader.{readerMethod}(reader.GetOrdinal(\"{col.Name}\")){nullFallback},");
+                string isBinary = (col.DataType).ToLower() == "byte[]" ? $"(byte[])": "";
+                sb.AppendLine($"                            {col.Name} = {nullCheck}{isBinary}reader.{readerMethod}(reader.GetOrdinal(\"{col.Name}\")){nullFallback},");
             }
-            sb.Append(@"/*USE THIS definition = reader.IsDBNull(reader.GetOrdinal(""definition""))? null
-                                        : (byte[])reader.GetValue(reader.GetOrdinal(""definition""))*/");
+            
             sb.AppendLine("                        });");
             sb.AppendLine("                    }");
             sb.AppendLine("                }");
@@ -473,12 +479,10 @@ namespace ThreeTierGenerator
                     string readerMethod = GetReaderMethod(col.DataType);
                     string nullCheck = col.IsNullable ? $"(reader[reader.GetOrdinal(\"{col.Name}\")] != DBNull.Value) ? " : "";
                     string nullFallback = col.IsNullable ? $" : ({col.DataType}?)null" : "";
-                    /*definition = reader.IsDBNull(reader.GetOrdinal("definition"))? null
-                                        : (byte[])reader.GetValue(reader.GetOrdinal("definition"))*/
-                    sb.AppendLine($"                            {col.Name} = {nullCheck}reader.{readerMethod}(reader.GetOrdinal(\"{col.Name}\")){nullFallback},");
+                    string isBinary = (col.DataType).ToLower() == "byte[]" ? $"(byte[])" : "";
+                    
+                    sb.AppendLine($"                            {col.Name} = {nullCheck}{isBinary}reader.{readerMethod}(reader.GetOrdinal(\"{col.Name}\")){nullFallback},");
                 }
-                sb.Append(@"/*USE THIS definition = reader.IsDBNull(reader.GetOrdinal(""definition""))? null
-                                        : (byte[])reader.GetValue(reader.GetOrdinal(""definition""))*/");
                 sb.AppendLine("                        };");
                 sb.AppendLine("                    }");
                 sb.AppendLine("                }");
@@ -588,12 +592,41 @@ namespace ThreeTierGenerator
             // For simplicity, we'll assume all PK integers are identity
             return col.IsPrimary && (col.DataType == "int" || col.DataType == "long");
         }
-
-
+        
         static string GetReaderMethod(string dataType)
+        {
+            switch (dataType.ToLower())
+            {
+                case "byte": return "GetByte";
+                case "short": return "GetInt16";
+                case "int": return "GetInt32";
+                case "long": return "GetInt64";
+                case "bool": return "GetBoolean";
+                case "datetime": return "GetDateTime";
+                case "datetimeoffset": return "GetDateTimeOffset";
+                case "timespan": return "GetTimeSpan";
+                case "decimal": return "GetDecimal";
+                case "double": return "GetDouble";
+                case "float": return "GetFloat";
+                case "guid": return "GetGuid";
+                case "byte[]": return "GetValue";
+                case "xml":
+                case "char":
+                case "varchar":
+                case "nchar":
+                case "nvarchar":
+                case "text":
+                case "ntext":
+                    return "GetString";
+                default: return "GetString";
+            }
+        }
+        static string GetReaderMethod2(string dataType)
         {
             switch (dataType)
             {
+                case "tinyint": return "GetByte";
+                case "smallint": return "GetInt16";
                 case "int": return "GetInt32";
                 case "long": return "GetInt64";
                 case "bool": return "GetBoolean";
@@ -604,10 +637,53 @@ namespace ThreeTierGenerator
                 case "float": return "GetFloat";
                 case "Guid": return "GetGuid";
                 case "byte[]": return "GetValue";
+               
                 default: return "GetString";
             }
         }
+        //static string GetReaderMethod(string dataType)
+        //{
+        //    switch (dataType.ToLower())  // Case-insensitive matching
+        //    {
+        //        // Integer types
+        //        case "tinyint": return "GetByte";
+        //        case "smallint": return "GetInt16";
+        //        case "int": return "GetInt32";
+        //        case "bigint": return "GetInt64";  // Added (was missing)
 
+        //        // Other types
+        //        case "bool": return "GetBoolean";   // Changed from "bool" to SQL name
+        //        case "uniqueidentifier": return "GetGuid";
+        //        case "datetime":
+        //        case "datetime2":
+        //        case "smalldatetime":
+        //        case "date":
+        //            return "GetDateTime";
+        //        case "datetimeoffset": return "GetDateTimeOffset";  // Added (was missing)
+        //        case "time": return "GetTimeSpan";
+        //        case "decimal":
+        //        case "money":
+        //        case "smallmoney":
+        //        case "numeric":
+        //            return "GetDecimal";
+        //        case "real": return "GetFloat";     // SQL's 4-byte float
+        //        case "float": return "GetDouble";    // SQL's 8-byte float
+        //        case "binary":
+        //        case "varbinary":
+        //        case "image":
+        //        case "timestamp":                   // rowversion
+        //            return "GetValue";              // Returns byte[]
+        //        case "xml":
+        //        case "char":
+        //        case "varchar":
+        //        case "nchar":
+        //        case "nvarchar":
+        //        case "text":
+        //        case "ntext":
+        //            return "GetString";
+        //        default: return "GetString";        // Fallback for unknown types
+        //    }
+        //}
         static void GenerateBLLClass(string path, TableSchema table)
         {
             string className = $"{table.Name}Service";
@@ -996,200 +1072,7 @@ namespace ThreeTierGenerator
 
             File.WriteAllText(fileName, sb.ToString());
         }
-        //static void GenerateConsoleApp(string path, List<TableSchema> tables, string dbName, string connectionString)
-        //{
-        //    string fileName = Path.Combine(path, "Program.cs");
-        //    string configFile = Path.Combine(path, "App.config");
-
-        //    // Generate App.config
-        //    var configSb = new StringBuilder();
-        //    configSb.AppendLine("<?xml version=\"1.0\" encoding=\"utf-8\" ?>");
-        //    configSb.AppendLine("<configuration>");
-        //    configSb.AppendLine("    <startup>");
-        //    configSb.AppendLine("        <supportedRuntime version=\"v4.0\" sku=\".NETFramework,Version=v4.8\" />");
-        //    configSb.AppendLine("    </startup>");
-        //    configSb.AppendLine("    <connectionStrings>");
-        //    configSb.AppendLine($"        <add name=\"DBConnection\" connectionString=\"{connectionString}\"");
-        //    configSb.AppendLine("             providerName=\"System.Data.SqlClient\" />");
-        //    configSb.AppendLine("    </connectionStrings>");
-        //    configSb.AppendLine("</configuration>");
-        //    File.WriteAllText(configFile, configSb.ToString());
-
-        //    // Generate Program.cs
-        //    var sb = new StringBuilder();
-        //    sb.AppendLine("using System;");
-        //    sb.AppendLine("using System.Collections.Generic;");
-        //    sb.AppendLine("using System.Configuration;");
-        //    sb.AppendLine("using BLL;");
-        //    sb.AppendLine("using DTO;");
-        //    sb.AppendLine();
-        //    sb.AppendLine("namespace ConsoleApp");
-        //    sb.AppendLine("{");
-        //    sb.AppendLine("    class Program");
-        //    sb.AppendLine("    {");
-        //    sb.AppendLine("        static void Main(string[] args)");
-        //    sb.AppendLine("        {");
-        //    sb.AppendLine("            string connectionString = ConfigurationManager.ConnectionStrings[\"DBConnection\"].ConnectionString;");
-        //    sb.AppendLine($"            Console.WriteLine($\"Connected to: {dbName}\");");
-        //    sb.AppendLine();
-        //    sb.AppendLine("            // Initialize services and table names");
-        //    sb.AppendLine("            List<string> tableNames = new List<string>();");
-        //    foreach (var table in tables)
-        //    {
-        //        sb.AppendLine($"            tableNames.Add(\"{table.Name}\");");
-        //        sb.AppendLine($"            var {table.Name.ToLower()}Service = new {table.Name}Service(connectionString);");
-        //    }
-
-        //    sb.AppendLine();
-        //    sb.AppendLine("            while (true)");
-        //    sb.AppendLine("            {");
-        //    sb.AppendLine("                Console.WriteLine(\"\\nMain Menu\");");
-        //    sb.AppendLine("                Console.WriteLine(\"=========\");");
-        //    sb.AppendLine("                Console.WriteLine(\"Select a table to manage:\");");
-        //    sb.AppendLine();
-
-        //    for (int i = 0; i < tables.Count; i++)
-        //    {
-        //        sb.AppendLine($"                Console.WriteLine(\"{i + 1}. {tables[i].Name}\");");
-        //    }
-        //    sb.AppendLine($"                Console.WriteLine(\"{tables.Count + 1}. Exit\");");
-        //    sb.AppendLine("                Console.Write(\"Choice: \");");
-        //    sb.AppendLine();
-        //    sb.AppendLine("                int choice;");
-        //    sb.AppendLine("                if (!int.TryParse(Console.ReadLine(), out choice)) continue;");
-        //    sb.AppendLine();
-        //    sb.AppendLine($"                if (choice == {tables.Count} + 1) break;");
-
-
-        //    sb.AppendLine("                if (choice < 1 || choice > tableNames.Count) continue;");
-        //    sb.AppendLine();
-        //    sb.AppendLine("                string selectedTableName = tableNames[choice - 1];");
-        //    sb.AppendLine("                Console.Clear();");
-        //    sb.AppendLine("                Console.WriteLine($\"Managing: {selectedTableName}\");");
-        //    sb.AppendLine("                Console.WriteLine(\"\\nOptions:\");");
-        //    sb.AppendLine("                Console.WriteLine(\"1. List All Records\");");
-        //    sb.AppendLine("                Console.WriteLine(\"2. View Record Details\");");
-        //    sb.AppendLine("                Console.WriteLine(\"3. Add New Record\"); ");
-        //    sb.AppendLine("                Console.WriteLine(\"4. Update Record\"); ");
-        //    sb.AppendLine("                Console.WriteLine(\"5. Delete Record\"); ");
-        //    sb.AppendLine("                Console.WriteLine(\"6. Back to Main Menu\"); ");
-        //    sb.AppendLine("                Console.WriteLine(\"Choice: \");");
-        //    sb.AppendLine();
-        //    sb.AppendLine("                int operation;");
-        //    sb.AppendLine("                if (!int.TryParse(Console.ReadLine(), out operation)) continue;");
-        //    sb.AppendLine();
-
-        //    // generate Methods Names
-
-        //    /*
-
-        //     mhmd
-        //     */
-
-
-
-
-        //    /**/
-        //    // string ListAll;//= string.Concat(" List{{selectedTableName}}Records({{selectedTableName.ToLower()}}Service);");
-        //    string ListAll = GenerateMethodCall(" selectedTableName", "List");
-
-        //    sb.AppendLine("                switch (operation)");
-        //    sb.AppendLine("                {");
-        //    sb.AppendLine("                    case 1: // List All");
-        //    //List{table.Name}Records({table.Name}Service service)
-        //    sb.AppendLine(ListAll);
-
-        //    sb.AppendLine("                Console.WriteLine($\"List{selectedTableName}Records({selectedTableName.ToLower()}Service\");");
-        //    //sb.AppendLine($"                        List{{selectedTableName}}Records({{selectedTableName.ToLower()}}Service);");
-        //    sb.AppendLine("                        break;");
-        //    sb.AppendLine("                    case 2: // View Details");
-        //    sb.AppendLine();
-        //    sb.AppendLine($"                        View{{selectedTableName}}Record({{selectedTableName.ToLower()}}Service);");
-        //    sb.AppendLine("                        break;");
-        //    sb.AppendLine("                    case 3: // Add New");
-        //    sb.AppendLine($"                        Add{{selectedTableName}}Record({{selectedTableName.ToLower()}}Service);");
-        //    sb.AppendLine("                        break;");
-        //    sb.AppendLine("                    case 4: // Update");
-        //    sb.AppendLine($"                        Update{{selectedTableName}}Record({{selectedTableName.ToLower()}}Service);");
-        //    sb.AppendLine("                        break;");
-        //    sb.AppendLine("                    case 5: // Delete");
-        //    sb.AppendLine($"                        Delete{{selectedTableName}}Record({{selectedTableName.ToLower()}}Service);");
-        //    sb.AppendLine("                        break;");
-        //    sb.AppendLine("                }");
-        //    sb.AppendLine("            }");
-        //    sb.AppendLine("        }");
-        //    sb.AppendLine();
-
-        //    // Generate methods for each table
-        //    foreach (var table in tables)
-        //    {
-        //        var pkColumn = table.Columns.Find(c => c.IsPrimary);
-
-        //        // List records method
-        //        sb.AppendLine($"        static void List{table.Name}Records({table.Name}Service service)");
-        //        sb.AppendLine("        {");
-        //        sb.AppendLine($"            var items = service.GetAll{table.Name}s();");
-        //        sb.AppendLine("            Console.WriteLine(\"\\nAll Records:\");");
-        //        sb.Append("            Console.WriteLine(\"");
-        //        foreach (var col in table.Columns)
-        //        {
-        //            sb.Append($"{col.Name.PadRight(15)}");
-        //        }
-        //        sb.AppendLine("\");");
-        //        sb.AppendLine("            foreach (var item in items)");
-        //        sb.AppendLine("            {");
-        //        sb.Append("                Console.WriteLine($\"");
-        //        foreach (var col in table.Columns)
-        //        {
-        //            string propValue = col.DataType == "DateTime"
-        //                ? $"{{item.{col.Name}?.ToString(\"yyyy-MM-dd\")}}"
-        //                : $"{{item.{col.Name}}}";
-
-        //            sb.Append($"{propValue.PadRight(15)}");
-        //        }
-        //        sb.AppendLine("\");");
-        //        sb.AppendLine("            }");
-        //        sb.AppendLine("            Console.WriteLine(\"\\nPress any key to continue...\");");
-        //        sb.AppendLine("            Console.ReadKey();");
-        //        sb.AppendLine("        }");
-        //        sb.AppendLine();
-
-        //        // View details method
-        //        if (pkColumn != null)
-        //        {
-
-        //            sb.AppendLine("        {");
-        //            sb.AppendLine($"            Console.Write(\"Enter {pkColumn.Name}: \");");
-        //            sb.AppendLine($"            if (!{GetParseMethod(pkColumn.DataType)}(Console.ReadLine(), out var id))");
-        //            sb.AppendLine("            {");
-        //            sb.AppendLine("                Console.WriteLine(\"Invalid ID\");");
-        //            sb.AppendLine("                return;");
-        //            sb.AppendLine("            }");
-        //            sb.AppendLine();
-        //            sb.AppendLine($"            var item = service.Get{table.Name}ById(id);");
-        //            sb.AppendLine("            if (item == null)");
-        //            sb.AppendLine("            {");
-        //            sb.AppendLine("                Console.WriteLine(\"Record not found\");");
-        //            sb.AppendLine("                return;");
-        //            sb.AppendLine("            }");
-        //            sb.AppendLine();
-        //            sb.AppendLine("            Console.WriteLine(\"\\nRecord Details:\");");
-        //            foreach (var col in table.Columns)
-        //            {
-        //                sb.AppendLine($"            Console.WriteLine($\"{col.Name.PadRight(20)}: {{item.{col.Name}}}\");");
-        //            }
-        //            sb.AppendLine("            Console.WriteLine(\"\\nPress any key to continue...\");");
-        //            sb.AppendLine("            Console.ReadKey();");
-        //            sb.AppendLine("        }");
-        //            sb.AppendLine();
-        //        }
-        //    }
-
-        //    sb.AppendLine("    }");
-        //    sb.AppendLine("}");
-
-        //    File.WriteAllText(fileName, sb.ToString());
-        //}
+    
 
         static string GetParseMethod(string dataType)
         {
