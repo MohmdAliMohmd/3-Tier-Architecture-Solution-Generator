@@ -684,6 +684,9 @@ namespace ThreeTierGenerator
         //        default: return "GetString";        // Fallback for unknown types
         //    }
         //}
+Microsoft.CSharp
+
+        
         static void GenerateBLLClass(string path, TableSchema table)
         {
             string className = $"{table.Name}Service";
