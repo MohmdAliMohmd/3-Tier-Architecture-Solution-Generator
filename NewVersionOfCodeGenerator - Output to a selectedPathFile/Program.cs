@@ -1721,7 +1721,7 @@ namespace ThreeTierGenerator
                 case "smalldatetime": return "GetDateTime";
                 case "date": return "GetDateTime";
                 case "datetimeoffset": return "GetDateTimeOffset";
-                case "time": return "GetTimeSpan";
+                case "timespan": return "GetTimeSpan";
                 case "decimal": return "GetDecimal";
                 case "money": return "GetDecimal";
                 case "smallmoney": return "GetDecimal";
@@ -2539,3 +2539,4 @@ namespace ThreeTierGenerator
         public int MaxLength { get; set; }
     }
 }
+
